@@ -1,7 +1,6 @@
 import 'reflect-metadata'
 import { container, type InjectionToken } from 'tsyringe'
 import { setupNetworkModule } from './modules/networkModule'
-import { setupRepositoryModule } from './modules/repositoryModule'
 
 let ready = false
 
@@ -17,8 +16,10 @@ export function setupDIContainer(): void {
     if (ready) {
         throw new Error('[DI] setupDIContainer() 가 두 번 호출됐다. 재등록은 기존 싱글턴을 조용히 버린다.')
     }
+    // 여기서 등록하는 것은 **토큰과 구현이 분리되는 것들**뿐이다.
+    // 도메인 Repository 는 `@singleton()` 자가등록이라 목록에 없다 — 그래서 core/di 가
+    // features/ 를 import 하지 않는다. 플랫폼 분기나 string 토큰이 생기면 그때 모듈이 늘어난다.
     setupNetworkModule()
-    setupRepositoryModule()
     ready = true
 }
 

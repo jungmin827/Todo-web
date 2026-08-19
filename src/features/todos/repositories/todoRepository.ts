@@ -1,4 +1,4 @@
-import { inject, injectable } from 'tsyringe'
+import { inject, singleton } from 'tsyringe'
 import { ApiClient } from '../../../core/network/apiClient'
 import { API_ENDPOINTS } from '../../../core/config/apiEndpoints'
 import { DefaultError } from '../../../core/error/defaultError'
@@ -11,10 +11,14 @@ import type {
     TodoUpdateDto,
 } from '../types/todoTypes'
 
-// Todo Repository — 서버 `/api/todos` 호출만 한다. 등록은 core/di/modules/repositoryModule.ts.
+// Todo Repository — 서버 `/api/todos` 호출만 한다.
 //
 // 이 파일이 지키는 규약:
-//  · `@injectable()` + repositoryModule 의 registerSingleton 조합 (`@singleton()` 자가등록 아님).
+//  · `@singleton()` 자가등록. 별도 등록 모듈을 두지 않는다.
+//    토큰이 클래스 자신이라 **토큰을 참조하려면 이 모듈을 import 해야 하고, import 하는 순간
+//    등록이 끝난다** — "등록 전에 resolve" 가 성립할 수 없다. 등록 모듈이 필요한 것은 토큰과
+//    구현이 분리되는 경우(string 토큰, 플랫폼 분기)뿐이다.
+//    core/di 가 feature 를 import 하지 않게 되는 효과도 같이 얻는다.
 //  · `ApiClient` 는 **값 import** 다. `import type` 으로 바꾸면 데코레이터 메타데이터가
 //    `Object` 로 낮아진다(0단계 spike 에서 변환 결과로 확인했다).
 //  · 경로는 API_ENDPOINTS 를 통해서만 참조한다.
@@ -26,7 +30,7 @@ import type {
 // 그래도 두는 이유는 이 경계를 지나온 에러의 타입이 **항상** DefaultError 임을 이 계층이
 // 스스로 보장하기 위해서다 — 나중에 ApiClient 를 갈아끼워도 위 계층의 분기가 안 깨진다.
 
-@injectable()
+@singleton()
 export class TodoRepository {
     // ⚠️ 파라미터 프로퍼티(`constructor(private readonly apiClient: ApiClient)`)를 쓸 수 없다.
     //    tsconfig 의 `erasableSyntaxOnly` 가 막는다(TS1294). 필드를 따로 선언해 대입한다.
