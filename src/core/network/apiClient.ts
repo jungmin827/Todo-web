@@ -1,4 +1,4 @@
-import { injectable } from 'tsyringe'
+import { singleton } from 'tsyringe'
 import { DefaultError } from '../error/defaultError'
 
 // HTTP 경계. 앱에서 fetch 를 직접 부르는 곳은 이 파일 하나다.
@@ -68,7 +68,10 @@ async function request<T>(method: string, url: string, data?: unknown, config?: 
     return (text ? JSON.parse(text) : undefined) as T
 }
 
-@injectable()
+// `@singleton()` = `injectable()` + `container.registerSingleton()`. 등록이 별도 모듈의
+// 런타임 호출이 아니라 **이 모듈이 평가되는 시점**에 끝난다. 토큰이 클래스 자신이라
+// `useDI(ApiClient)` 를 쓰려면 이 모듈을 import 해야 하고, 그 순간 이미 등록돼 있다.
+@singleton()
 export class ApiClient {
     async get<T = unknown>(url: string, config?: RequestConfig): Promise<T> {
         return request<T>('GET', url, undefined, config)
