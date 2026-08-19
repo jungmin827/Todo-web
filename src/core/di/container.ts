@@ -1,36 +1,39 @@
 import 'reflect-metadata'
 import { container, type InjectionToken } from 'tsyringe'
-import { setupNetworkModule } from './modules/networkModule'
 
 let ready = false
 
 /**
- * DI 컨테이너 초기화. main.tsx 가 createRoot 이전에 정확히 한 번 부른다.
+ * 앱 부팅 표시. main.tsx 가 createRoot 이전에 정확히 한 번 부른다.
  *
- * 두 번 부르는 것을 막는 이유: registerSingleton 은 기존 등록을 덮어쓴다. 두 번째 호출이
- * 싱글턴을 새 인스턴스로 갈아치우고, 이전 인스턴스를 붙잡고 있던 쪽은 경고도 예외도 없이
- * 다른 객체를 보게 된다. 지금은 모듈 스코프 1회 호출이라 안전하지만, 이 호출이 useEffect 로
- * 옮겨지는 순간 StrictMode 의 effect 이중 실행으로 바로 재현된다.
+ * ⚠️ **지금 이 함수는 아무것도 등록하지 않는다.** 클래스 토큰을 쓰는 것들(`ApiClient`,
+ * 도메인 Repository)은 전부 `@singleton()` 자가등록이라 등록이 **모듈 평가 시점**에 끝난다.
+ * 토큰을 참조하려면 그 모듈을 import 해야 하므로, 등록 누락이라는 실패 자체가 성립하지 않는다.
+ *
+ * 그래도 함수를 남기는 이유는 둘이다.
+ *  · 아래 `resolve` 의 부팅 순서 가드가 기댈 지점 — 모듈 평가 도중(렌더 이전)에 resolve 하는
+ *    코드를 막는다. 그런 호출은 등록 여부와 무관하게 설계상 있으면 안 된다.
+ *  · 토큰과 구현이 분리되는 등록(string 토큰, 플랫폼 분기)이 생기면 그것들이 들어올 자리다.
+ *    그때는 자가등록이 불가능해 명시 등록 모듈이 필요하다.
+ *
+ * 두 번 부르는 것을 막는 것은 그 부팅 지점이 하나임을 강제하기 위해서다.
  */
 export function setupDIContainer(): void {
     if (ready) {
-        throw new Error('[DI] setupDIContainer() 가 두 번 호출됐다. 재등록은 기존 싱글턴을 조용히 버린다.')
+        throw new Error('[DI] setupDIContainer() 가 두 번 호출됐다. 부팅 지점은 하나여야 한다.')
     }
-    // 여기서 등록하는 것은 **토큰과 구현이 분리되는 것들**뿐이다.
-    // 도메인 Repository 는 `@singleton()` 자가등록이라 목록에 없다 — 그래서 core/di 가
-    // features/ 를 import 하지 않는다. 플랫폼 분기나 string 토큰이 생기면 그때 모듈이 늘어난다.
-    setupNetworkModule()
     ready = true
 }
 
 /**
  * 의존성 조회. 소비처는 tsyringe 의 `container` 를 직접 import 하지 않고 이 함수를 쓴다.
  *
- * 막으려는 것은 tsyringe 가 `@injectable()` 클래스를 **등록 없이도** resolve 해 주는 데서
- * 나오는 침묵 실패 2종이다. 등록 전에는 호출마다 새 인스턴스가 나온다.
- *   (1) 초기화 전 resolve — 버려질 인스턴스를 받는다.
- *   (2) 등록 누락 — 에러 없이 렌더마다 새 인스턴스가 만들어져 메모이제이션이 전부 무효화된다.
- * 둘 다 빌드 신호를 남기지 않으므로 여기서 시끄럽게 죽인다.
+ * 막으려는 것은 tsyringe 가 미등록 `@injectable()` 클래스도 resolve 해 주는 데서 나오는
+ * 침묵 실패다 — 등록돼 있지 않으면 에러 대신 **호출마다 새 인스턴스**가 나오고, 렌더마다
+ * 다른 객체가 되어 useMemo/useCallback 메모이제이션이 전부 무효화된다. 빌드 신호도 없다.
+ *
+ * `@singleton()` 을 쓰는 지금은 이 경로로 새는 것이 없지만, 가드는 남긴다 —
+ * `@singleton()` 을 빠뜨린 클래스나 등록이 필요한 string 토큰이 들어오는 순간 다시 유효해진다.
  */
 export function resolve<T>(token: InjectionToken<T>): T {
     if (!ready) {
@@ -38,7 +41,10 @@ export function resolve<T>(token: InjectionToken<T>): T {
     }
     if (!container.isRegistered(token)) {
         const name = typeof token === 'function' ? token.name : String(token)
-        throw new Error(`[DI] "${name}" 이(가) 등록돼 있지 않다. core/di/modules/ 를 확인하라.`)
+        throw new Error(
+            `[DI] "${name}" 이(가) 등록돼 있지 않다. 클래스라면 \`@singleton()\` 이 붙어 있는지, ` +
+                'string 토큰이라면 등록 모듈이 있는지 확인하라.',
+        )
     }
     return container.resolve(token)
 }
